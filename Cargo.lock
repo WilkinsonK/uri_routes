@@ -56,7 +56,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "routes"
+name = "uri-routes"
 version = "0.1.0"
 dependencies = [
  "http",

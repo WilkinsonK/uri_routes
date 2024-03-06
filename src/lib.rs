@@ -120,7 +120,7 @@ impl<'a> RouteBuilder<'a> for ApiRouteBuilder<'a> {
     /// Tries to build a URI from path arguments
     /// and parameters.
     /// ```rust
-    /// use crate::routes::{RouteBuilder, ApiRouteBuilder};
+    /// use crate::uri_routes::{RouteBuilder, ApiRouteBuilder};
     /// let route = ApiRouteBuilder::new("google.com").build().unwrap();
     /// assert_eq!(route, "https://google.com")
     /// ```
@@ -139,7 +139,7 @@ impl<'a> RouteBuilder<'a> for ApiRouteBuilder<'a> {
 
     /// Add a parameter key/pair to the builder.
     /// ```rust
-    /// use crate::routes::{RouteBuilder, ApiRouteBuilder};
+    /// use crate::uri_routes::{RouteBuilder, ApiRouteBuilder};
     /// let route = ApiRouteBuilder::new("fqdm.org")
     ///     .with_param("page", 1)
     ///     .build()
@@ -153,7 +153,7 @@ impl<'a> RouteBuilder<'a> for ApiRouteBuilder<'a> {
     /// Add a path argument to the end of the
     /// path buffer.
     /// ```rust
-    /// use crate::routes::{RouteBuilder, ApiRouteBuilder};
+    /// use crate::uri_routes::{RouteBuilder, ApiRouteBuilder};
     /// let route = ApiRouteBuilder::new("fqdm.org")
     ///     .with_path("resource")
     ///     .build()
@@ -167,7 +167,7 @@ impl<'a> RouteBuilder<'a> for ApiRouteBuilder<'a> {
     /// Inserts a path argument with the desired
     /// weight.
     /// ```rust
-    /// use crate::routes::{RouteBuilder, ApiRouteBuilder};
+    /// use crate::uri_routes::{RouteBuilder, ApiRouteBuilder};
     /// let route = ApiRouteBuilder::new("fqdm.org")
     ///     .with_path_weight("resource0", 2.0)
     ///     .with_path_weight("resource1", 1.0)
@@ -182,7 +182,7 @@ impl<'a> RouteBuilder<'a> for ApiRouteBuilder<'a> {
     /// Tries to build a URI from path arguments
     /// and parameters.
     /// ```rust
-    /// use crate::routes::{RouteBuilder, ApiRouteBuilder};
+    /// use crate::uri_routes::{RouteBuilder, ApiRouteBuilder};
     /// let route = ApiRouteBuilder::new("localhost")
     ///     .with_scheme("file")
     ///     .build()
