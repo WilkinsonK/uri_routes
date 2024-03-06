@@ -1,5 +1,7 @@
 [package]
 name = "routes"
+description = "URI building library"
+license = "BSD-3-clause"
 version = "0.1.0"
 edition = "2021"
 
