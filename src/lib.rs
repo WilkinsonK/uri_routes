@@ -20,7 +20,7 @@ pub trait RouteBuilder<'a> {
     /// weight.
     fn with_path_weight(self, path: String, weight: f32) -> Self;
     /// Set the protocol scheme.
-    fn with_scheme(self, scheme: &'a str) -> Self;
+    fn with_scheme(self, scheme: String) -> Self;
 }
 
 #[derive(Clone, Eq, Ord)]
@@ -141,7 +141,7 @@ impl<'a> RouteBuilder<'a> for ApiRouteBuilder<'a> {
     /// ```rust
     /// use crate::uri_routes::{RouteBuilder, ApiRouteBuilder};
     /// let route = ApiRouteBuilder::new("fqdm.org")
-    ///     .with_param("page", 1)
+    ///     .with_param("page".into(), 1)
     ///     .build()
     ///     .unwrap();
     /// assert_eq!(route, "https://fqdm.org?page=1")
@@ -155,7 +155,7 @@ impl<'a> RouteBuilder<'a> for ApiRouteBuilder<'a> {
     /// ```rust
     /// use crate::uri_routes::{RouteBuilder, ApiRouteBuilder};
     /// let route = ApiRouteBuilder::new("fqdm.org")
-    ///     .with_path("resource")
+    ///     .with_path("resource".into())
     ///     .build()
     ///     .unwrap();
     /// assert_eq!(route, "https://fqdm.org/resource")
@@ -169,8 +169,8 @@ impl<'a> RouteBuilder<'a> for ApiRouteBuilder<'a> {
     /// ```rust
     /// use crate::uri_routes::{RouteBuilder, ApiRouteBuilder};
     /// let route = ApiRouteBuilder::new("fqdm.org")
-    ///     .with_path_weight("resource0", 2.0)
-    ///     .with_path_weight("resource1", 1.0)
+    ///     .with_path_weight("resource0".into(), 2.0)
+    ///     .with_path_weight("resource1".into(), 1.0)
     ///     .build()
     ///     .unwrap();
     /// assert_eq!(route, "https://fqdm.org/resource1/resource0")
@@ -184,12 +184,12 @@ impl<'a> RouteBuilder<'a> for ApiRouteBuilder<'a> {
     /// ```rust
     /// use crate::uri_routes::{RouteBuilder, ApiRouteBuilder};
     /// let route = ApiRouteBuilder::new("localhost")
-    ///     .with_scheme("file")
+    ///     .with_scheme("file".into())
     ///     .build()
     ///     .unwrap();
     /// assert_eq!(route, "file://localhost")
     /// ```
-    fn with_scheme(self, scheme: &'a str) -> Self {
+    fn with_scheme(self, scheme: String) -> Self {
         self.insert_scheme(Some(scheme.to_owned()))
     }
 }
