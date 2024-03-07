@@ -12,13 +12,13 @@ pub trait RouteBuilder<'a> {
     /// and parameters.
     fn build(self) -> Result<uri::Uri, http::Error>;
     /// Add a parameter key/pair to the builder.
-    fn with_param<T: ToString>(self, name: &'a str, value: T) -> Self;
+    fn with_param<T: ToString>(self, name: String, value: T) -> Self;
     /// Add a path argument to the end of the
     /// path buffer.
-    fn with_path(self, path: &'a str) -> Self;
+    fn with_path(self, path: String) -> Self;
     /// Inserts a path argument with the desired
     /// weight.
-    fn with_path_weight(self, path: &'a str, weight: f32) -> Self;
+    fn with_path_weight(self, path: String, weight: f32) -> Self;
     /// Set the protocol scheme.
     fn with_scheme(self, scheme: &'a str) -> Self;
 }
@@ -30,7 +30,7 @@ struct ApiRoutePath {
 }
 
 impl ApiRoutePath {
-    pub fn new<'a>(path: &'a str, weight: f32) -> Self {
+    pub fn new<'a>(path: String, weight: f32) -> Self {
         Self{path: path.to_owned(), weight: OrderedFloat::from(weight)}
     }
 }
@@ -67,12 +67,12 @@ pub struct ApiRouteBuilder<'a> {
 }
 
 impl<'a> ApiRouteBuilder<'a> {
-    fn insert_param<T: ToString>(mut self, name: &'a str, value: T) -> Self {
+    fn insert_param<T: ToString>(mut self, name: String, value: T) -> Self {
         self.parameters.push(format!("{name}={}", value.to_string()));
         self
     }
 
-    fn insert_path(mut self, path: &'a str, weight: Option<f32>) -> Self {
+    fn insert_path(mut self, path: String, weight: Option<f32>) -> Self {
         let weight = weight
             .unwrap_or(f32::MAX)
             .clamp(0.1, f32::MAX);
@@ -113,7 +113,7 @@ impl<'a> RouteBuilder<'a> for ApiRouteBuilder<'a> {
             hostname: host,
             parameters: vec![],
             scheme: None,
-            sub_paths: vec![ApiRoutePath::new("/", 0.0)]
+            sub_paths: vec![ApiRoutePath::new(String::from("/"), 0.0)]
         }
     }
 
@@ -146,7 +146,7 @@ impl<'a> RouteBuilder<'a> for ApiRouteBuilder<'a> {
     ///     .unwrap();
     /// assert_eq!(route, "https://fqdm.org?page=1")
     /// ```
-    fn with_param<T: ToString>(self, name: &'a str, value: T) -> Self {
+    fn with_param<T: ToString>(self, name: String, value: T) -> Self {
         self.insert_param(name, value)
     }
 
@@ -160,7 +160,7 @@ impl<'a> RouteBuilder<'a> for ApiRouteBuilder<'a> {
     ///     .unwrap();
     /// assert_eq!(route, "https://fqdm.org/resource")
     /// ```
-    fn with_path(self, path: &'a str) -> Self {
+    fn with_path(self, path: String) -> Self {
         self.insert_path(path, None)
     }
 
@@ -175,7 +175,7 @@ impl<'a> RouteBuilder<'a> for ApiRouteBuilder<'a> {
     ///     .unwrap();
     /// assert_eq!(route, "https://fqdm.org/resource1/resource0")
     /// ```
-    fn with_path_weight(self, path: &'a str, weight: f32) -> Self {
+    fn with_path_weight(self, path: String, weight: f32) -> Self {
         self.insert_path(path, Some(weight))
     }
 
