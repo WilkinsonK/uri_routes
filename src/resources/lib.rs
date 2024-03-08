@@ -1,6 +1,8 @@
-//! # XAPI Oxidized
-//! Interacts with a remote XNAT via REST exposing the **XAPI** as
-//! bindings in Rust.
+//! # URI Routes Resources.
+//! A sidecar library for detailing the specifics of how a URI should
+//! be constructed.
+//! Allows for a rudimentary check of path arguments, when/if they are
+//! required to build the resulting URI.
 use std::{borrow::BorrowMut, fmt::{Debug, Display}};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
