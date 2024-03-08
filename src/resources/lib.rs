@@ -194,6 +194,10 @@ pub trait CoreResource<T> {
     /// The name of the resource component. Is
     /// used as the path component on digestion.
     fn name(&self) -> String;
+    /// The child `Resource` node.
+    fn child(&self) -> Option<&Box<Self>>;
+    /// The parent `Resource` node.
+    fn parent(&self) -> Option<&Box<Self>>;
     /// If this is a child of another resource.
     ///
     /// Initialy created object should produce a
@@ -301,6 +305,14 @@ impl<'a, T: Clone + Display> CoreResource<T> for ApiResource<'a, T> {
         self.name.to_owned()
     }
 
+    fn child(&self) -> Option<&Box<Self>> {
+        self.child.as_ref()
+    }
+
+    fn parent(&self) -> Option<&Box<Self>> {
+        self.parent.as_ref()
+    }
+
     fn is_child(&self) -> bool {
         self.parent.is_some()
     }
@@ -388,3 +400,9 @@ impl<'a, T: Debug + Display + Clone> WithResource<'a, T> for ApiResource<'a, T> 
         }
     }
 }
+
+pub trait Resource<T: Clone + Display>:
+    CoreResource<T> +
+    ArgedResource<T> +
+    WeightedResource +
+    WeightedResource {}
