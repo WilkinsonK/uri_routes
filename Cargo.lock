@@ -56,6 +56,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "uri-resources"
+version = "0.1.2"
+
+[[package]]
 name = "uri-routes"
 version = "0.1.2"
 dependencies = [
