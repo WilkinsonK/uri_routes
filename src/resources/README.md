@@ -1,4 +1,5 @@
 # URI Routes Resources.
+![GitHub Repo stars](https://img.shields.io/github/stars/WilkinsonK/uri_routes)
 ![GitHub License](https://img.shields.io/github/license/WilkinsonK/uri_routes)
 ![GitHub Workflow Status (with event)](https://img.shields.io/github/actions/workflow/status/WilkinsonK/uri_routes/rust.yml)
 
