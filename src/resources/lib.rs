@@ -78,6 +78,11 @@ impl Display for ChildAlreadySet {
 
 impl std::error::Error for ChildAlreadySet {}
 
+/// Represents a single part of of a URI path.
+/// Where arguments are optional, there are
+/// interfaces which allow this object to check
+/// if an argument is required by either this
+/// component, or entities that are related to it.
 #[derive(Debug)]
 pub struct ApiResource<'a, T: Display> {
     name:            &'a str,
@@ -88,7 +93,14 @@ pub struct ApiResource<'a, T: Display> {
     weight:          f32,
 }
 
+/// Barebones basic implementation of an
+/// `ApiResource`.
+/// ```rust
+/// use uri_resources::ApiResource;
+/// let resource: ApiResource<'_, String> = ApiResource::new("resource");
+/// ```
 impl<'a, T: Display> ApiResource<'a, T> {
+    /// Create a new instance of `ApiResource`.
     pub fn new<'b: 'a>(name: &'b str) -> Self {
         Self{
             name: name,
@@ -114,19 +126,28 @@ impl<T: Clone + Display> Clone for ApiResource<'_, T> {
     }
 }
 
-impl<T: Clone + Debug + Display> Iterator for ApiResource<'_, T> {
-    type Item = Self;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.parent.is_some() {
-            Some(*self.parent.as_ref().unwrap().to_owned())
-        } else {
-            None
-        }
-    }
-}
-
+/// Composes an object into a path component,
+/// conditionally failing if the implemented
+/// instance does not meet the requirements set
+/// by it's declaration.
+///
+/// Ensure resources can be digested as path
+/// components.
+/// ```rust
+/// use uri_resources::{ApiResource, PathComponent};
+/// let path = ApiResource::<String>::new("resource").as_path_component();
+/// assert!(!path.is_err())
+/// ```
+///
+/// Ensure resources can be digested and return
+/// the expected value.
+/// ```rust
+/// use uri_resources::{ApiResource, PathComponent};
+/// let path = ApiResource::<String>::new("resource").as_path_component();
+/// assert_eq!(path.unwrap(), String::from("resource/"))
+/// ```
 pub trait PathComponent {
+    /// Composes this as a path component.
     fn as_path_component(&self) -> Result<String>;
 }
 
@@ -164,14 +185,113 @@ impl<'a, T: Clone + Display> ArgedResource<T> for ApiResource<'a, T> {
     }
 }
 
+/// The core functionality that is to be expected
+/// of some resource object. These methods assist
+/// in the work done by other traits in this
+/// library. Specifically by managing the the
+/// resource and it's relatives.
 pub trait CoreResource<T> {
+    /// The name of the resource component. Is
+    /// used as the path component on digestion.
     fn name(&self) -> String;
+    /// If this is a child of another resource.
+    ///
+    /// Initialy created object should produce a
+    /// non-child node.
+    /// ```rust
+    /// use uri_resources::{ApiResource, CoreResource};
+    /// let resource = ApiResource::<String>::new("resource");
+    /// assert_eq!(resource.is_child(), false)
+    /// ```
+    ///
+    /// Try to create an instance of two nodes
+    /// where one is related to the other as the
+    /// parent.
+    /// ```rust
+    /// use uri_resources::{ApiResource, CoreResource, WithResource};
+    /// let mut child = ApiResource::<String>::new("child_resource");
+    /// let parent = ApiResource::<String>::new("parent_resource")
+    ///     .with_child(&mut child);
+    /// assert_eq!(child.is_child(), true)
+    /// ```
     fn is_child(&self) -> bool;
+    /// If this is the first resource of the path.
+    ///
+    /// Initialy created object should produce a
+    /// root node.
+    /// ```rust
+    /// use uri_resources::{ApiResource, CoreResource};
+    /// let resource = ApiResource::<String>::new("resource");
+    /// assert_eq!(resource.is_root(), true)
+    /// ```
+    ///
+    /// Subsequent objects should not be a root
+    /// node.
+    /// ```rust
+    /// use uri_resources::{ApiResource, CoreResource, WithResource};
+    /// let mut child = ApiResource::<String>::new("child_resource");
+    /// let parent = ApiResource::<String>::new("parent_resource")
+    ///     .with_child(&mut child);
+    /// assert_ne!(child.is_root(), true)
+    /// ```
     fn is_root(&self) -> bool;
+    /// If this is the last resource of the path.
+    ///
+    /// Root node can be a tail node if it is the
+    /// only resource node.
+    /// ```rust
+    /// use uri_resources::{ApiResource, CoreResource};
+    /// let resource = ApiResource::<String>::new("resource");
+    /// assert!(resource.is_tail())
+    /// ```
+    /// If there are otherwise child nodes, a root
+    /// node cannot be the 'tail'.
+    /// ```
+    /// use uri_resources::{ApiResource, CoreResource, WithResource};
+    /// let mut child0 = ApiResource::<String>::new("child_resource0");
+    /// let mut child1 = ApiResource::<String>::new("child_resource1");
+    ///
+    /// child0 = *child0.with_child(&mut child1).expect("resource node");
+    /// let parent = ApiResource::<String>::new("parent_resource")
+    ///     .with_child(&mut child0);
+    /// assert!(!parent.expect("parent node").is_tail())
+    /// ```
+    ///
+    /// The middle child cannot be the tail.
+    /// ```rust
+    /// use uri_resources::{ApiResource, CoreResource, WithResource};
+    /// let mut child0 = ApiResource::<String>::new("child_resource0");
+    /// let mut child1 = ApiResource::<String>::new("child_resource1");
+    ///
+    /// child0 = *child0.with_child(&mut child1).expect("resource node");
+    /// let parent = ApiResource::<String>::new("parent_resource")
+    ///     .with_child(&mut child0);
+    /// assert!(child0.is_child() && !child0.is_tail());
+    /// ```
+    ///
+    /// The last child should be the tail.
+    /// ```rust
+    /// use uri_resources::{ApiResource, CoreResource, WithResource};
+    /// let mut child0 = ApiResource::<String>::new("child_resource0");
+    /// let mut child1 = ApiResource::<String>::new("child_resource1");
+    ///
+    /// child0 = *child0.with_child(&mut child1).expect("resource node");
+    /// let parent = ApiResource::<String>::new("parent_resource")
+    ///     .with_child(&mut child0);
+    /// assert!(child1.is_child() && child1.is_tail())
+    /// ```
     fn is_tail(&self) -> bool;
+    /// Determines if, and by whom, an argument
+    /// set on this is required.
     fn required_by(&self) -> ArgRequiredBy;
+    /// Sets an argument on this resource
+    /// component.
     fn with_arg(&mut self, arg: T) -> &mut Self;
+    /// Sets if, and by whom, this component's
+    /// argument is required.
     fn with_arg_required(&mut self, required: ArgRequiredBy) -> &mut Self;
+    /// Determines the ordering weight to be used
+    /// by pre-digestion sorting.
     fn with_weight(&mut self, weight: f32) -> &mut Self;
 }
 
