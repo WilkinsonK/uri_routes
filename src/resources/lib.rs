@@ -244,6 +244,7 @@ pub trait CoreResource<T> {
     /// let resource = ApiResource::<String>::new("resource");
     /// assert!(resource.is_tail())
     /// ```
+    ///
     /// If there are otherwise child nodes, a root
     /// node cannot be the 'tail'.
     /// ```
@@ -332,7 +333,11 @@ impl<'a, T: Clone + Display> CoreResource<T> for ApiResource<'a, T> {
     }
 }
 
+/// Resource can be 'weighted'. This allows use
+/// in `uri_routes`, after digestion to sort
+/// paths in the final required. order.
 pub trait WeightedResource {
+    /// The sorting weight value of this.
     fn weight(&self) -> f32;
 }
 
@@ -342,8 +347,17 @@ impl<T: Display> WeightedResource for ApiResource<'_, T> {
     }
 }
 
+/// Allows resources to set their child and parent
+/// nodes.
 pub trait WithResource<'a, T: Display> {
+    // Not adding a test here as prior tests cover
+    // this well enough.
+
+    /// Adds a child node to this resource. Fails
+    /// if the child is already set.
     fn with_child(&mut self, child: &mut ApiResource<'a, T>) -> Result<Box<Self>>;
+    /// Adds the parent node to this resource.
+    /// Fails if the parent is already set.
     fn with_parent(&mut self, parent: &mut ApiResource<'a, T>) -> Result<Box<Self>>;
 }
 
