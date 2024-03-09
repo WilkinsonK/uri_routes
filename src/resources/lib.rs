@@ -258,28 +258,6 @@ impl<'a, T: Clone + Display> CoreResource<T> for ApiResource<'a, T> {
     }
 }
 
-/// Resource can be 'weighted'. This allows use
-/// in `uri_routes`, after digestion to sort
-/// paths in the final required. order.
-pub trait WeightedResource {
-    /// The sorting weight value of this.
-    fn weight(&self) -> f32;
-    /// Determines the ordering weight to be used
-    /// by pre-digestion sorting.
-    fn with_weight(&mut self, weight: f32) -> &mut Self;
-}
-
-impl<T: Display> WeightedResource for ApiResource<'_, T> {
-    fn weight(&self) -> f32 {
-        self.weight
-    }
-
-    fn with_weight(&mut self, weight: f32) -> &mut Self {
-        self.weight = weight;
-        self
-    }
-}
-
 /// Allows resources to set their child and parent
 /// nodes.
 pub trait LinkedResource<'a, T: Display> {
@@ -428,6 +406,28 @@ impl<'a, T: Debug + Display + Clone> LinkedResource<'a, T> for ApiResource<'a, T
             },
             Some(_) => Err(ResourceError::AlreadySet(self.name(), "parent".into()).into())
         }
+    }
+}
+
+/// Resource can be 'weighted'. This allows use
+/// in `uri_routes`, after digestion to sort
+/// paths in the final required. order.
+pub trait WeightedResource {
+    /// The sorting weight value of this.
+    fn weight(&self) -> f32;
+    /// Determines the ordering weight to be used
+    /// by pre-digestion sorting.
+    fn with_weight(&mut self, weight: f32) -> &Self;
+}
+
+impl<T: Display> WeightedResource for ApiResource<'_, T> {
+    fn weight(&self) -> f32 {
+        self.weight
+    }
+
+    fn with_weight(&mut self, weight: f32) -> &Self {
+        self.weight = weight;
+        self
     }
 }
 
