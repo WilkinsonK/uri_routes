@@ -5,7 +5,7 @@
 //! required to build the resulting URI.
 use std::{borrow::BorrowMut, fmt::{Debug, Display}};
 
-pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+use anyhow::Result;
 
 #[derive(Clone, Copy, Debug)]
 pub enum ArgRequiredBy {
@@ -33,38 +33,19 @@ impl ArgRequiredBy {
     }
 }
 
-#[derive(Clone, Debug)]
-struct ArgNotFound(pub String);
-
-impl Display for ArgNotFound {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "resource {:?} requires an argument", self.0)
-    }
+#[derive(thiserror::Error, Clone, Debug)]
+pub enum ArgError {
+    #[error("{0} requires an argument")]
+    Missing(String),
+    #[error("{0} invalid with reason(s): {1:?}")]
+    NotValid(String, Vec<String>)
 }
 
-impl std::error::Error for ArgNotFound {}
-
-#[derive(Clone, Debug)]
-struct ParentAlreadySet(pub String);
-
-impl Display for ParentAlreadySet {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "resource {:?} parent already set", self.0)
-    }
+#[derive(thiserror::Error, Clone, Debug)]
+pub enum ResourceError {
+    #[error("existing {1} node of {0} already set")]
+    AlreadySet(String, String),
 }
-
-impl std::error::Error for ParentAlreadySet {}
-
-#[derive(Clone, Debug)]
-struct ChildAlreadySet(pub String);
-
-impl Display for ChildAlreadySet {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "resource {:?} child already set", self.0)
-    }
-}
-
-impl std::error::Error for ChildAlreadySet {}
 
 /// Represents a single part of of a URI path.
 /// Where arguments are optional, there are
@@ -76,6 +57,7 @@ pub struct ApiResource<'a, T: Display> {
     name:            &'a str,
     arg:             Option<T>,
     arg_required_by: ArgRequiredBy,
+    arg_validators:  Vec<fn(&T) -> Result<()>>,
     child:           Option<Box<Self>>,
     parent:          Option<Box<Self>>,
     weight:          f32,
@@ -94,6 +76,7 @@ impl<'a, T: Display> ApiResource<'a, T> {
             name,
             arg: None,
             arg_required_by: ArgRequiredBy::NoOne,
+            arg_validators: vec![],
             child: None,
             parent: None,
             weight: 0.0
@@ -107,6 +90,7 @@ impl<T: Clone + Display> Clone for ApiResource<'_, T> {
             name: self.name,
             arg:  self.arg.clone(),
             arg_required_by: self.arg_required_by,
+            arg_validators: self.arg_validators.clone(),
             child: self.child.clone(),
             parent: self.parent.clone(),
             weight: self.weight
@@ -144,7 +128,7 @@ pub trait PathComponent {
     /// collection can be composed into a single
     /// String value without error.
     /// ```rust
-    /// use uri_resources::{ApiResource, CoreResource, WithResource, PathComponent};
+    /// use uri_resources::{ApiResource, LinkedResource, PathComponent};
     /// let mut child0 = ApiResource::<String>::new("child_resource0");
     /// let mut child1 = ApiResource::<String>::new("child_resource1");
     ///
@@ -160,7 +144,7 @@ pub trait PathComponent {
     /// collection can be composed into a single
     /// String value without error.
     /// ```rust
-    /// use uri_resources::{ApiResource, CoreResource, WithResource, PathComponent};
+    /// use uri_resources::{ApiResource, LinkedResource, PathComponent};
     /// let mut child0 = ApiResource::<String>::new("child_resource0");
     /// let mut child1 = ApiResource::<String>::new("child_resource1");
     ///
@@ -176,39 +160,46 @@ pub trait PathComponent {
 
 impl<'a, T: Debug + Display + Clone> PathComponent for ApiResource<'a, T> {
     fn as_path_component(&self) -> Result<String> {
-        if self.arg_required_by.is_me() && self.arg.is_none() {
-            Err(ArgNotFound(self.name().to_owned()).into())
-        } else if self.arg_required_by.is_parent() && self.parent.is_some() && self.arg.is_none() {
-            Err(ArgNotFound(self
-                .parent
-                .as_ref()
-                .unwrap()
-                .name()
-                .to_owned()).into())
-        } else if self.arg_required_by.is_child() && self.child.is_some() && self.arg.is_none() {
-            Err(ArgNotFound(self
-                .child
-                .as_ref()
-                .unwrap()
-                .name()
-                .to_owned()).into())
+        let to_argnotfound = |n: &Self| {
+            Err(ArgError::Missing(n.name().to_owned()).into())
+        };
+
+        if self.arg.is_some() || self.required_by().is_noone() {
+            let errors: Vec<_> = self.arg_validators
+                .iter()
+                .map(|f| { (f)(self.arg.as_ref().unwrap()) })
+                .filter(|r| r.is_err())
+                .map(|r| r.unwrap_err().to_string())
+                .collect();
+
+            if !errors.is_empty()  {
+                Err(ArgError::NotValid(self.name(), errors).into())
+            } else {
+                let ret = format!(
+                    "{}/{}",
+                    self.name(),
+                    self.arg.clone().map_or("".into(), |a| a.to_string()));
+                Ok(ret)
+            }
+        } else if self.required_by().is_parent() && self.parent.is_some() {
+            to_argnotfound(self.parent().unwrap())
+        } else if self.required_by().is_child() && self.child.is_some() {
+            to_argnotfound(self.child().unwrap())
         } else {
-            Ok(format!("{}/{}", self.name(), self.arg.clone().map_or("".into(), |a| a.to_string())))
+            to_argnotfound(self)
         }
     }
 
     fn compose(&self) -> Result<String> {
-        let mut current    = self;
+        let mut curr = Some(self);
         let mut components = vec![];
 
-        components.push(match current.as_path_component() {
-            Ok(path) => path,
-            e => return e
-        });
-        while !current.is_tail() {
-            current = current.child().unwrap();
-            components.push(match current.as_path_component() {
-                Ok(path) => path,
+        while curr.is_some() {
+            components.push(match curr.unwrap().as_path_component() {
+                Ok(path) => {
+                    curr = curr.unwrap().child();
+                    path
+                },
                 e => return e
             });
         }
@@ -217,12 +208,36 @@ impl<'a, T: Debug + Display + Clone> PathComponent for ApiResource<'a, T> {
 }
 
 pub trait ArgedResource<T> {
+    /// Argument set on this resource.
     fn argument(&self) -> Option<&T>;
+    /// Determines if, and by whom, an argument
+    /// set on this is required.
+    fn required_by(&self) -> ArgRequiredBy;
+    /// Sets an argument on this resource
+    /// component.
+    fn with_arg(&mut self, arg: T) -> &mut Self;
+    /// Sets if, and by whom, this component's
+    /// argument is required.
+    fn with_arg_required(&mut self, required: ArgRequiredBy) -> &mut Self;
 }
 
 impl<'a, T: Clone + Display> ArgedResource<T> for ApiResource<'a, T> {
     fn argument(&self) -> Option<&T> {
         self.arg.as_ref()
+    }
+
+    fn required_by(&self) -> ArgRequiredBy {
+        self.arg_required_by
+    }
+
+    fn with_arg(&mut self, arg: T) -> &mut Self {
+        self.arg = Some(arg);
+        self
+    }
+
+    fn with_arg_required(&mut self, required: ArgRequiredBy) -> &mut Self {
+        self.arg_required_by = required;
+        self
     }
 }
 
@@ -235,6 +250,39 @@ pub trait CoreResource<T> {
     /// The name of the resource component. Is
     /// used as the path component on digestion.
     fn name(&self) -> String;
+}
+
+impl<'a, T: Clone + Display> CoreResource<T> for ApiResource<'a, T> {
+    fn name(&self) -> String {
+        self.name.to_owned()
+    }
+}
+
+/// Resource can be 'weighted'. This allows use
+/// in `uri_routes`, after digestion to sort
+/// paths in the final required. order.
+pub trait WeightedResource {
+    /// The sorting weight value of this.
+    fn weight(&self) -> f32;
+    /// Determines the ordering weight to be used
+    /// by pre-digestion sorting.
+    fn with_weight(&mut self, weight: f32) -> &mut Self;
+}
+
+impl<T: Display> WeightedResource for ApiResource<'_, T> {
+    fn weight(&self) -> f32 {
+        self.weight
+    }
+
+    fn with_weight(&mut self, weight: f32) -> &mut Self {
+        self.weight = weight;
+        self
+    }
+}
+
+/// Allows resources to set their child and parent
+/// nodes.
+pub trait LinkedResource<'a, T: Display> {
     /// The child `Resource` node.
     fn child(&self) -> Option<&Self>;
     /// The parent `Resource` node.
@@ -244,7 +292,7 @@ pub trait CoreResource<T> {
     /// Initialy created object should produce a
     /// non-child node.
     /// ```rust
-    /// use uri_resources::{ApiResource, CoreResource};
+    /// use uri_resources::{ApiResource, LinkedResource};
     /// let resource = ApiResource::<String>::new("resource");
     /// assert_eq!(resource.is_child(), false)
     /// ```
@@ -253,7 +301,7 @@ pub trait CoreResource<T> {
     /// where one is related to the other as the
     /// parent.
     /// ```rust
-    /// use uri_resources::{ApiResource, CoreResource, WithResource};
+    /// use uri_resources::{ApiResource, LinkedResource};
     /// let mut child = ApiResource::<String>::new("child_resource");
     /// let parent = ApiResource::<String>::new("parent_resource")
     ///     .with_child(&mut child);
@@ -265,7 +313,7 @@ pub trait CoreResource<T> {
     /// Initialy created object should produce a
     /// root node.
     /// ```rust
-    /// use uri_resources::{ApiResource, CoreResource};
+    /// use uri_resources::{ApiResource, LinkedResource};
     /// let resource = ApiResource::<String>::new("resource");
     /// assert_eq!(resource.is_root(), true)
     /// ```
@@ -273,7 +321,7 @@ pub trait CoreResource<T> {
     /// Subsequent objects should not be a root
     /// node.
     /// ```rust
-    /// use uri_resources::{ApiResource, CoreResource, WithResource};
+    /// use uri_resources::{ApiResource, LinkedResource};
     /// let mut child = ApiResource::<String>::new("child_resource");
     /// let parent = ApiResource::<String>::new("parent_resource")
     ///     .with_child(&mut child);
@@ -285,7 +333,7 @@ pub trait CoreResource<T> {
     /// Root node can be a tail node if it is the
     /// only resource node.
     /// ```rust
-    /// use uri_resources::{ApiResource, CoreResource};
+    /// use uri_resources::{ApiResource, LinkedResource};
     /// let resource = ApiResource::<String>::new("resource");
     /// assert!(resource.is_tail())
     /// ```
@@ -293,7 +341,7 @@ pub trait CoreResource<T> {
     /// If there are otherwise child nodes, a root
     /// node cannot be the 'tail'.
     /// ```
-    /// use uri_resources::{ApiResource, CoreResource, WithResource};
+    /// use uri_resources::{ApiResource, LinkedResource};
     /// let mut child0 = ApiResource::<String>::new("child_resource0");
     /// let mut child1 = ApiResource::<String>::new("child_resource1");
     ///
@@ -305,7 +353,7 @@ pub trait CoreResource<T> {
     ///
     /// The middle child cannot be the tail.
     /// ```rust
-    /// use uri_resources::{ApiResource, CoreResource, WithResource};
+    /// use uri_resources::{ApiResource, LinkedResource};
     /// let mut child0 = ApiResource::<String>::new("child_resource0");
     /// let mut child1 = ApiResource::<String>::new("child_resource1");
     ///
@@ -317,7 +365,7 @@ pub trait CoreResource<T> {
     ///
     /// The last child should be the tail.
     /// ```rust
-    /// use uri_resources::{ApiResource, CoreResource, WithResource};
+    /// use uri_resources::{ApiResource, LinkedResource};
     /// let mut child0 = ApiResource::<String>::new("child_resource0");
     /// let mut child1 = ApiResource::<String>::new("child_resource1");
     ///
@@ -327,25 +375,15 @@ pub trait CoreResource<T> {
     /// assert!(child1.is_child() && child1.is_tail())
     /// ```
     fn is_tail(&self) -> bool;
-    /// Determines if, and by whom, an argument
-    /// set on this is required.
-    fn required_by(&self) -> ArgRequiredBy;
-    /// Sets an argument on this resource
-    /// component.
-    fn with_arg(&mut self, arg: T) -> &mut Self;
-    /// Sets if, and by whom, this component's
-    /// argument is required.
-    fn with_arg_required(&mut self, required: ArgRequiredBy) -> &mut Self;
-    /// Determines the ordering weight to be used
-    /// by pre-digestion sorting.
-    fn with_weight(&mut self, weight: f32) -> &mut Self;
+    /// Adds a child node to this resource. Fails
+    /// if the child is already set.
+    fn with_child(&mut self, child: &mut ApiResource<'a, T>) -> Result<Box<Self>>;
+    /// Adds the parent node to this resource.
+    /// Fails if the parent is already set.
+    fn with_parent(&mut self, parent: &mut ApiResource<'a, T>) -> Result<Box<Self>>;
 }
 
-impl<'a, T: Clone + Display> CoreResource<T> for ApiResource<'a, T> {
-    fn name(&self) -> String {
-        self.name.to_owned()
-    }
-
+impl<'a, T: Debug + Display + Clone> LinkedResource<'a, T> for ApiResource<'a, T> {
     fn child(&self) -> Option<&Self> {
         self.child.as_deref()
     }
@@ -366,55 +404,6 @@ impl<'a, T: Clone + Display> CoreResource<T> for ApiResource<'a, T> {
         self.child.is_none()
     }
 
-    fn required_by(&self) -> ArgRequiredBy {
-        self.arg_required_by
-    }
-
-    fn with_arg(&mut self, arg: T) -> &mut Self {
-        self.arg = Some(arg);
-        self
-    }
-
-    fn with_arg_required(&mut self, required: ArgRequiredBy) -> &mut Self {
-        self.arg_required_by = required;
-        self
-    }
-
-    fn with_weight(&mut self, weight: f32) -> &mut Self {
-        self.weight = weight;
-        self
-    }
-}
-
-/// Resource can be 'weighted'. This allows use
-/// in `uri_routes`, after digestion to sort
-/// paths in the final required. order.
-pub trait WeightedResource {
-    /// The sorting weight value of this.
-    fn weight(&self) -> f32;
-}
-
-impl<T: Display> WeightedResource for ApiResource<'_, T> {
-    fn weight(&self) -> f32 {
-        self.weight
-    }
-}
-
-/// Allows resources to set their child and parent
-/// nodes.
-pub trait WithResource<'a, T: Display> {
-    // Not adding a test here as prior tests cover
-    // this well enough.
-
-    /// Adds a child node to this resource. Fails
-    /// if the child is already set.
-    fn with_child(&mut self, child: &mut ApiResource<'a, T>) -> Result<Box<Self>>;
-    /// Adds the parent node to this resource.
-    /// Fails if the parent is already set.
-    fn with_parent(&mut self, parent: &mut ApiResource<'a, T>) -> Result<Box<Self>>;
-}
-
-impl<'a, T: Debug + Display + Clone> WithResource<'a, T> for ApiResource<'a, T> {
     fn with_child(&mut self, child: &mut ApiResource<'a, T>) -> Result<Box<Self>> {
         match self.child {
             None => {
@@ -427,7 +416,7 @@ impl<'a, T: Debug + Display + Clone> WithResource<'a, T> for ApiResource<'a, T> 
                     Err(e) => Err(e)
                 }
             },
-            Some(_) => Err(ChildAlreadySet(self.name().to_owned()).into())
+            Some(_) => Err(ResourceError::AlreadySet(self.name(), "child".into()).into())
         }
     }
 
@@ -437,7 +426,7 @@ impl<'a, T: Debug + Display + Clone> WithResource<'a, T> for ApiResource<'a, T> 
                 self.parent = Box::new(parent.clone()).into();
                 Ok(Box::new(self.clone()))
             },
-            Some(_) => Err(ParentAlreadySet(self.name().to_owned()).into())
+            Some(_) => Err(ResourceError::AlreadySet(self.name(), "parent".into()).into())
         }
     }
 }
@@ -447,3 +436,5 @@ pub trait Resource<T: Clone + Display>:
     ArgedResource<T> +
     WeightedResource +
     WeightedResource {}
+
+impl<T: Clone + Display> Resource<T> for ApiResource<'_, T> {}

@@ -2,7 +2,7 @@
 name = "uri-resources"
 description = "Resource URI building library"
 license-file = "LICENSE"
-version = "0.1.4"
+version = "0.2.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -11,3 +11,7 @@ name = "uri_resources"
 path = "lib.rs"
 doc  = true
 crate-type = ["lib"]
+
+[dependencies]
+anyhow = "1.0.80"
+thiserror = "1.0.57"
