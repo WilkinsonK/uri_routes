@@ -221,7 +221,7 @@ impl<'a, T: Debug + Display + Clone> PathComponent for ApiResource<'a, T> {
             current = current.child().unwrap();
             components.push(match current.as_path_component() {
                 Ok(path) => path,
-                Err(e) => return Err(e)
+                e => return e
             });
         }
         Ok(components.join("/").replace("//", "/"))
