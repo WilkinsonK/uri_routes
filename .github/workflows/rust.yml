@@ -16,6 +16,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - name: Install Auditor
+      run: cargo install cargo-audit
+    - name: Clippy
+      run: cargo clippy --verbose -- -D warnings
     - name: Build
       run: cargo build --verbose
     - name: Run tests

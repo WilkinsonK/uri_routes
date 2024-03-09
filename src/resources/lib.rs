@@ -17,31 +17,19 @@ pub enum ArgRequiredBy {
 
 impl ArgRequiredBy {
     pub fn is_child(self) -> bool {
-        match self {
-            ArgRequiredBy::Child => true,
-            _ => false
-        }
+        matches!(self, Self::Child)
     }
 
     pub fn is_me(self) -> bool {
-        match self {
-            ArgRequiredBy::Me => true,
-            _ => false
-        }
+        matches!(self, Self::Me)
     }
 
     pub fn is_noone(self) -> bool {
-        match self {
-            ArgRequiredBy::NoOne => true,
-            _ => false
-        }
+        matches!(self, Self::NoOne)
     }
 
     pub fn is_parent(self) -> bool {
-        match self {
-            ArgRequiredBy::Parent => true,
-            _ => false
-        }
+        matches!(self, Self::Parent)
     }
 }
 
@@ -103,7 +91,7 @@ impl<'a, T: Display> ApiResource<'a, T> {
     /// Create a new instance of `ApiResource`.
     pub fn new<'b: 'a>(name: &'b str) -> Self {
         Self{
-            name: name,
+            name,
             arg: None,
             arg_required_by: ArgRequiredBy::NoOne,
             child: None,
@@ -248,9 +236,9 @@ pub trait CoreResource<T> {
     /// used as the path component on digestion.
     fn name(&self) -> String;
     /// The child `Resource` node.
-    fn child(&self) -> Option<&Box<Self>>;
+    fn child(&self) -> Option<&Self>;
     /// The parent `Resource` node.
-    fn parent(&self) -> Option<&Box<Self>>;
+    fn parent(&self) -> Option<&Self>;
     /// If this is a child of another resource.
     ///
     /// Initialy created object should produce a
@@ -358,12 +346,12 @@ impl<'a, T: Clone + Display> CoreResource<T> for ApiResource<'a, T> {
         self.name.to_owned()
     }
 
-    fn child(&self) -> Option<&Box<Self>> {
-        self.child.as_ref()
+    fn child(&self) -> Option<&Self> {
+        self.child.as_deref()
     }
 
-    fn parent(&self) -> Option<&Box<Self>> {
-        self.parent.as_ref()
+    fn parent(&self) -> Option<&Self> {
+        self.parent.as_deref()
     }
 
     fn is_child(&self) -> bool {

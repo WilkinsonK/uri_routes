@@ -23,15 +23,21 @@ pub trait RouteBuilder<'a> {
     fn with_scheme(self, scheme: String) -> Self;
 }
 
-#[derive(Clone, Eq, Ord)]
+#[derive(Clone, Eq)]
 struct ApiRoutePath {
     path:   String,
     weight: OrderedFloat<f32>,
 }
 
 impl ApiRoutePath {
-    pub fn new<'a>(path: String, weight: f32) -> Self {
+    pub fn new(path: String, weight: f32) -> Self {
         Self{path: path.to_owned(), weight: OrderedFloat::from(weight)}
+    }
+}
+
+impl Ord for ApiRoutePath {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.weight.cmp(&other.weight)
     }
 }
 
@@ -49,7 +55,7 @@ impl PartialEq<str> for ApiRoutePath {
 
 impl PartialOrd for ApiRoutePath {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.weight.partial_cmp(&other.weight)
+        Some(self.cmp(other))
     }
 }
 
