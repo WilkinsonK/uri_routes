@@ -138,17 +138,52 @@ impl<T: Clone + Display> Clone for ApiResource<'_, T> {
 /// let path = ApiResource::<String>::new("resource").as_path_component();
 /// assert!(!path.is_err())
 /// ```
-///
-/// Ensure resources can be digested and return
-/// the expected value.
-/// ```rust
-/// use uri_resources::{ApiResource, PathComponent};
-/// let path = ApiResource::<String>::new("resource").as_path_component();
-/// assert_eq!(path.unwrap(), String::from("resource/"))
-/// ```
 pub trait PathComponent {
     /// Composes this as a path component.
+    ///
+    /// Ensure resources can be digested and return
+    /// the expected value.
+    /// ```rust
+    /// use uri_resources::{ApiResource, PathComponent};
+    /// let path = ApiResource::<String>::new("resource").as_path_component();
+    /// assert_eq!(path.unwrap(), String::from("resource/"))
+    /// ```
     fn as_path_component(&self) -> Result<String>;
+    /// Compose the entire heirarchy of components
+    /// into one string.
+    ///
+    /// Ensure the composition of a multi node
+    /// collection can be composed into a single
+    /// String value without error.
+    /// ```rust
+    /// use uri_resources::{ApiResource, CoreResource, WithResource, PathComponent};
+    /// let mut child0 = ApiResource::<String>::new("child_resource0");
+    /// let mut child1 = ApiResource::<String>::new("child_resource1");
+    ///
+    /// child0 = *child0.with_child(&mut child1).expect("resource node");
+    /// let parent = ApiResource::<String>::new("parent_resource")
+    ///     .with_child(&mut child0);
+    ///
+    /// let path = parent.expect("parent node").compose();
+    /// assert!(!path.is_err())
+    /// ```
+    ///
+    /// Ensure the composition of a multi node
+    /// collection can be composed into a single
+    /// String value without error.
+    /// ```rust
+    /// use uri_resources::{ApiResource, CoreResource, WithResource, PathComponent};
+    /// let mut child0 = ApiResource::<String>::new("child_resource0");
+    /// let mut child1 = ApiResource::<String>::new("child_resource1");
+    ///
+    /// child0 = *child0.with_child(&mut child1).expect("resource node");
+    /// let parent = ApiResource::<String>::new("parent_resource")
+    ///     .with_child(&mut child0);
+    ///
+    /// let path = parent.expect("parent node").compose();
+    /// assert_eq!(path.expect("composed path"), "parent_resource/child_resource0/child_resource1/")
+    /// ```
+    fn compose(&self) -> Result<String>;
 }
 
 impl<'a, T: Debug + Display + Clone> PathComponent for ApiResource<'a, T> {
@@ -172,6 +207,24 @@ impl<'a, T: Debug + Display + Clone> PathComponent for ApiResource<'a, T> {
         } else {
             Ok(format!("{}/{}", self.name(), self.arg.clone().map_or("".into(), |a| a.to_string())))
         }
+    }
+
+    fn compose(&self) -> Result<String> {
+        let mut current    = self;
+        let mut components = vec![];
+
+        components.push(match current.as_path_component() {
+            Ok(path) => path,
+            e => return e
+        });
+        while !current.is_tail() {
+            current = current.child().unwrap();
+            components.push(match current.as_path_component() {
+                Ok(path) => path,
+                Err(e) => return Err(e)
+            });
+        }
+        Ok(components.join("/").replace("//", "/"))
     }
 }
 
