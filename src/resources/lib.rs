@@ -164,7 +164,7 @@ impl<'a, T: Debug + Display + Clone> PathComponent for ApiResource<'a, T> {
             Err(ArgError::Missing(n.name().to_owned()).into())
         };
 
-        if self.arg.is_some() || self.required_by().is_noone() {
+        let compose_this = || {
             let errors: Vec<_> = self.arg_validators
                 .iter()
                 .map(|f| { (f)(self.arg.as_ref().unwrap()) })
@@ -181,12 +181,16 @@ impl<'a, T: Debug + Display + Clone> PathComponent for ApiResource<'a, T> {
                     self.arg.clone().map_or("".into(), |a| a.to_string()));
                 Ok(ret)
             }
+        };
+
+        if self.arg.is_some() || self.required_by().is_noone() {
+            compose_this()
         } else if self.required_by().is_parent() && self.parent.is_some() {
             to_argnotfound(self.parent().unwrap())
         } else if self.required_by().is_child() && self.child.is_some() {
             to_argnotfound(self.child().unwrap())
         } else {
-            to_argnotfound(self)
+            compose_this()
         }
     }
 
