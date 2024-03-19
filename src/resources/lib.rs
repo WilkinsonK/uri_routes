@@ -435,10 +435,10 @@ impl<T: Display> WeightedResource for ApiResource<'_, T> {
     }
 }
 
-pub trait Resource<T: Clone + Display>:
+pub trait Resource<'a, T: Clone + Display>:
     CoreResource<T> +
     ArgedResource<T> +
-    WeightedResource +
+    LinkedResource<'a, T> +
     WeightedResource {}
 
-impl<T: Clone + Display> Resource<T> for ApiResource<'_, T> {}
+impl<'a, T: Clone + Debug + Display> Resource<'a, T> for ApiResource<'a, T> {}
